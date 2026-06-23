@@ -71,6 +71,7 @@
 
     // Global treegrid registry for reload and external access
     if (!window._treegridRegistry) window._treegridRegistry = {};
+    if (!window._treegridState) window._treegridState = {};
 
     function reloadTreegrid() {
         var tree = $.ui.fancytree.getTree('#' + CARD_CODE + '_table');
@@ -237,6 +238,24 @@
             var target = tree.getNodeByKey(command.target_key);
             if (!node || !target) return;
             node.moveTo(target, command.mode || 'child');
+        };
+
+        ajax_helpers.command_functions.treegrid_snapshot_state = function (command) {
+            var tree = $.ui.fancytree.getTree('#' + command.card + '_table');
+            if (!tree) return;
+            var expanded = [], selected = [], activeKey = null;
+            tree.visit(function (node) {
+                if (node.isExpanded()) expanded.push(node.key);
+                if (node.isSelected()) selected.push(node.key);
+            });
+            console.log('saced', command.card, expanded)
+            var an = tree.getActiveNode();
+            if (an) activeKey = an.key;
+            var $scroll = $('#' + command.card + '_table').closest('[style*="overflow"]');
+            window._treegridState[command.card] = {
+                expanded: expanded, selected: selected, activeKey: activeKey,
+                scrollTop: $scroll.length ? $scroll.scrollTop() : 0
+            };
         };
     }
 
@@ -966,6 +985,27 @@
                 _populateAutoFilters();
                 if (EXPAND_ALL) {
                     data.tree.expandAll(true);
+                }
+                // Restore state captured before a rebuild (set by treegrid_snapshot_state)
+                var saved = window._treegridState[CARD_CODE];
+                if (saved) {
+                    delete window._treegridState[CARD_CODE];
+                    saved.expanded.forEach(function (k) {
+                        var n = data.tree.getNodeByKey(k);
+                        if (n) n.setExpanded(true, {noAnimation: true, noEvents: true});
+                    });
+                    saved.selected.forEach(function (k) {
+                        var n = data.tree.getNodeByKey(k);
+                        if (n) n.setSelected(true, {noEvents: true});
+                    });
+                    if (saved.activeKey) {
+                        var a = data.tree.getNodeByKey(saved.activeKey);
+                        if (a) a.setActive(true, {noEvents: true, noFocus: true});
+                    }
+                    if (saved.scrollTop) {
+                        var $scroll = $('#' + CARD_CODE + '_table').closest('[style*="overflow"]');
+                        if ($scroll.length) $scroll.scrollTop(saved.scrollTop);
+                    }
                 }
                 if (CURRENT_NODE) {
                     var currentFtNode = data.tree.getNodeByKey(CURRENT_NODE);
