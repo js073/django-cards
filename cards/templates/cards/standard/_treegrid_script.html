@@ -982,6 +982,7 @@
                 updateInfo();
                 buildJsFilters();
                 _populateAutoFilters();
+                _populateHtmlFilters();
                 if (EXPAND_ALL) {
                     data.tree.expandAll(true);
                 }
@@ -1120,6 +1121,7 @@
                 updateInfo();
                 buildJsFilters();
                 _populateAutoFilters();
+                _populateHtmlFilters();
                 if (CHECKBOX) {
                     if (data.node.isSelected()) {
                         data.node.visit(function(child) {
@@ -1512,6 +1514,77 @@
             });
         }
 
+        // Reduce a cell's HTML to a plain filter key: its text content, or
+        // (for content with no text, e.g. a bare colour swatch) the first hex code.
+        function _htmlFilterKey(html) {
+            var d = document.createElement('div');
+            d.innerHTML = html;
+            var text = (d.textContent || '').replace(/\s+/g, ' ').trim();
+            if (text) return text;
+            var m = html.match(/#([0-9a-fA-F]{3,8})\b/);
+            return m ? m[1] : '';
+        }
+
+        // Populate the custom HTML (swatch) dropdowns: each option renders the cell
+        // HTML as-is and carries the extracted text content as its filter value.
+        function _populateHtmlFilters() {
+            var $wrappers = $('#' + CARD_CODE + '_table .treegrid-html-filter[data-auto-options]');
+            if (!$wrappers.length) return;
+
+            var colIndices = [];
+            $wrappers.each(function() { colIndices.push(parseInt($(this).data('col-idx'))); });
+
+            var colValues = {};   // idx -> { filterKey: cellHtml }
+            colIndices.forEach(function(i) { colValues[i] = {}; });
+
+            function collectFrom(title, data) {
+                colIndices.forEach(function(idx) {
+                    var html = idx === NODE_COLUMN
+                        ? String(title || '')
+                        : (COLUMNS[idx] && data && data[COLUMNS[idx].field] != null
+                            ? String(data[COLUMNS[idx].field]) : '');
+                    if (!html) return;
+                    var key = _htmlFilterKey(html);
+                    if (key) colValues[idx][key] = html;
+                });
+            }
+
+            if (PAGINATION && _allNodes.length) {
+                _allNodes.forEach(function(n) { collectFrom(n.title, n.data); });
+            } else {
+                var tree = $.ui.fancytree.getTree('#' + CARD_CODE + '_table');
+                if (tree) tree.visit(function(node) { collectFrom(node.title, node.data); });
+            }
+
+            $wrappers.each(function() {
+                var $wrap = $(this);
+                var idx = parseInt($wrap.data('col-idx'));
+                var $menu = $wrap.find('.treegrid-html-filter-menu');
+                var $input = $wrap.find('input.treegrid-col-filter');
+                var currentVal = $input.val();
+                var keys = Object.keys(colValues[idx]).sort();
+                $menu.empty();
+                $menu.append($('<div class="treegrid-html-filter-item" data-value=""></div>').html('&nbsp;'));
+                keys.forEach(function(k) {
+                    $menu.append($('<div class="treegrid-html-filter-item"></div>').attr('data-value', k).html(colValues[idx][k]));
+                });
+                var $label = $wrap.find('.treegrid-html-filter-label');
+                if (currentVal && colValues[idx][currentVal]) {
+                    $label.html(colValues[idx][currentVal]);
+                } else if (!currentVal) {
+                    $label.html('&nbsp;');
+                }
+            });
+
+            // Match the toggle height to the sibling native filter controls so it
+            // lines up regardless of the active Bootstrap theme's form-control sizing.
+            var $ref = $('#' + CARD_CODE + '_table .treegrid-col-filter').filter('select, input[type="text"]').first();
+            if ($ref.length) {
+                var refH = $ref.outerHeight();
+                if (refH) $('#' + CARD_CODE + '_table .treegrid-html-filter-toggle').css('height', refH + 'px');
+            }
+        }
+
         // Per-column filters
         if (SHOW_COL_FILTERS) {
             // Stop Fancytree intercepting arrow/backspace keys typed into filter inputs
@@ -1547,6 +1620,26 @@
                     }
                 }
                 updateInfo();
+            });
+
+            // Custom HTML (swatch) dropdown: open/close, select, outside-click
+            $('#' + CARD_CODE + '_table').on('click', '.treegrid-html-filter-toggle', function(e) {
+                e.stopPropagation();
+                var $menu = $(this).closest('.treegrid-html-filter').find('.treegrid-html-filter-menu');
+                $('#' + CARD_CODE + '_table .treegrid-html-filter-menu').not($menu).removeClass('show');
+                $menu.toggleClass('show');
+            });
+            $('#' + CARD_CODE + '_table').on('click', '.treegrid-html-filter-item', function(e) {
+                e.stopPropagation();
+                var $item = $(this);
+                var $wrap = $item.closest('.treegrid-html-filter');
+                var val = $item.attr('data-value') || '';
+                $wrap.find('.treegrid-html-filter-label').html($item.html());
+                $wrap.find('.treegrid-html-filter-menu').removeClass('show');
+                $wrap.find('input.treegrid-col-filter').val(val).trigger('change');
+            });
+            $(document).on('click.treegridhtmlfilter_' + CARD_CODE, function() {
+                $('#' + CARD_CODE + '_table .treegrid-html-filter-menu').removeClass('show');
             });
 
         }
