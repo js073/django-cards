@@ -1829,6 +1829,28 @@ self.treegrid_move_node(card_name, key, target_key, mode='child')
 return self.treegrid_reload_response(card_name)
 ```
 
+### Remembering State
+If `ajax_helpers` are being used inside a project, the treegrid state can be remembered when reloading the tree. For example:
+
+```python
+class SomeView:
+    def get_tree_grid_card(self):
+        ...
+        return tree_grid_card # The treegrid card object
+    
+    # AJAX helpers button or other method
+    def button_refresh_tree_grid(self):
+        card = self.get_tree_grid_card()
+        self.add_command('treegrid_snapshot_state', card=card.code)
+        selector = 'some_selector_for_parent_div_of_treegrid'
+        return self.command_response('html', selector=selector, html=card.render())
+
+
+```
+NOTES: 
+- This does not work with lazy treegrids, only static data treegrids. For lazy, the `self.add_command('reload_treegrid', card=card_name)` command can be used.
+- This also does not work with paginated treegrids currently. 
+
 ---
 
 ## Iframe Card
