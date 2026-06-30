@@ -480,9 +480,13 @@ class CardMixin:
                 context = {}
             if 'details_object' in kwargs:
                 context['object'] = kwargs['details_object']
-            if hasattr(self, 'request'):
-                context['request'] = self.request
-            html = render_to_string(context_template_name, context)
+            request = getattr(self, 'request', None)
+            if request is not None:
+                context['request'] = request
+            # Pass request= so render_to_string builds a RequestContext and runs
+            # the context processors (notably csrf). Without it {% csrf_token %}
+            # renders empty and any POST form inside an HTML card fails CSRF (403).
+            html = render_to_string(context_template_name, context, request=request)
         else:
             html = ''
 
